@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>KagozBill — Receipt Generator</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23ffffff'/%3E%3Cpolygon points='37,10 37,22 49,22' fill='%23047857'/%3E%3Cpath d='M38 10H14V54H32' fill='none' stroke='%23047857' stroke-width='4' stroke-linecap='square'/%3E%3Cpath d='M38 10L50 22V54H32' fill='none' stroke='%230f1e2e' stroke-width='4' stroke-linecap='square'/%3E%3Crect x='20' y='21' width='12' height='3' fill='%23047857'/%3E%3Crect x='20' y='28' width='16' height='3' fill='%23047857'/%3E%3Crect x='20' y='35' width='16' height='3' fill='%23047857'/%3E%3Crect x='20' y='42' width='11' height='3' fill='%23047857'/%3E%3Crect x='40' y='28' width='5' height='3' fill='%230f1e2e'/%3E%3Crect x='40' y='34' width='5' height='3' fill='%230f1e2e'/%3E%3Crect x='40' y='40' width='5' height='3' fill='%230f1e2e'/%3E%3Crect x='40' y='46' width='5' height='3' fill='%230f1e2e'/%3E%3C/svg%3E" />
   <script src="https://cdn.tailwindcss.com/3.4.17"></script>
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -187,14 +188,22 @@
   <header class="no-print bg-white border-b border-gray-200 sticky top-0 z-30">
     <div class="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-3">
       <div class="flex items-center gap-2.5 min-w-0">
-        <div class="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5l-3-2-3 2-3-2-3 2V5a2 2 0 012-2h10a2 2 0 012 2v16z" />
-          </svg>
-        </div>
+        <svg class="w-9 h-9 shrink-0" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="KagozBill Logo">
+          <polygon points="37,10 37,22 49,22" fill="#047857" />
+          <path d="M38 10H14V54H32" stroke="#047857" stroke-width="4" stroke-linecap="square" />
+          <path d="M38 10L50 22V54H32" stroke="#0F1E2E" stroke-width="4" stroke-linecap="square" />
+          <rect x="20" y="21" width="12" height="3" fill="#047857" />
+          <rect x="20" y="28" width="16" height="3" fill="#047857" />
+          <rect x="20" y="35" width="16" height="3" fill="#047857" />
+          <rect x="20" y="42" width="11" height="3" fill="#047857" />
+          <rect x="40" y="28" width="5" height="3" fill="#0F1E2E" />
+          <rect x="40" y="34" width="5" height="3" fill="#0F1E2E" />
+          <rect x="40" y="40" width="5" height="3" fill="#0F1E2E" />
+          <rect x="40" y="46" width="5" height="3" fill="#0F1E2E" />
+        </svg>
         <div class="min-w-0">
           <div class="flex items-center gap-2">
-            <h1 class="text-sm sm:text-base font-bold text-gray-900 truncate tracking-tight">KagozBill</h1>
+            <h1 class="text-base sm:text-lg font-bold tracking-tight truncate"><span class="text-[#0F1E2E]">Kagoz</span><span class="text-[#047857]">Bill</span></h1>
             <span id="autoSaveBadge" class="hidden sm:inline-flex items-center gap-1 text-[10px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
               <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
               Auto-saved
