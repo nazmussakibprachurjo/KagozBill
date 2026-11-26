@@ -1,0 +1,1778 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>KagozBill — Receipt Generator</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Libre+Baskerville:wght@400;700&display=swap');
+
+    :root {
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      --font-serif: 'Libre Baskerville', Georgia, 'Times New Roman', serif;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background-color: #f3f4f6;
+      color: #111827;
+    }
+
+    .font-shop-serif {
+      font-family: var(--font-serif);
+    }
+
+    /* Editable receipt inputs that look like clean text until hovered/focused */
+    .receipt-input {
+      background: transparent;
+      border: 1px dashed transparent;
+      border-radius: 4px;
+      transition: border-color 0.15s ease, background-color 0.15s ease;
+      width: 100%;
+    }
+
+    .receipt-input:hover {
+      border-color: #d1d5db;
+      background-color: #f9fafb;
+    }
+
+    .receipt-input:focus {
+      outline: none;
+      border-color: #059669;
+      border-style: solid;
+      background-color: #ffffff;
+    }
+
+    .preview-mode .receipt-input,
+    .preview-mode .receipt-select,
+    .export-mode .receipt-input,
+    .export-mode .receipt-select {
+      border-color: transparent !important;
+      background-color: transparent !important;
+      pointer-events: none;
+      appearance: none;
+      -webkit-appearance: none;
+    }
+
+    .preview-mode .edit-only,
+    .export-mode .edit-only {
+      display: none !important;
+    }
+
+    .preview-mode .logo-box.is-empty {
+      border-color: #111827;
+    }
+
+    .export-mode .logo-box.is-empty {
+      display: none !important;
+    }
+
+    /* Theme variations */
+    .theme-minimalist .table-header-row {
+      border-bottom: 2px solid #111827;
+      background: transparent;
+      color: #111827;
+    }
+
+    .theme-minimalist .total-pill {
+      border: 1.5px solid #111827;
+      border-radius: 9999px;
+      background: #ffffff;
+      color: #111827;
+    }
+
+    .theme-classic .table-header-row {
+      background: #0f172a;
+      color: #ffffff;
+      border-radius: 6px;
+      border-bottom: none;
+    }
+
+    .theme-classic .total-pill {
+      border: 1.5px solid #0f172a;
+      border-radius: 8px;
+      background: #f8fafc;
+      color: #0f172a;
+    }
+
+    .theme-modern .table-header-row {
+      background: #ecfdf5;
+      color: #065f46;
+      border-bottom: 2px solid #059669;
+      border-radius: 6px 6px 0 0;
+    }
+
+    .theme-modern .total-pill {
+      border: 1.5px solid #059669;
+      border-radius: 9999px;
+      background: #ecfdf5;
+      color: #065f46;
+    }
+
+    /* Hide number input spinners */
+    input[type="number"]::-webkit-inner-spin-button,
+    input[type="number"]::-webkit-outer-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+    input[type="number"] {
+      -moz-appearance: textfield;
+    }
+
+    /* Toast animation */
+    .toast-enter {
+      transform: translateY(0);
+      opacity: 1;
+    }
+    .toast-exit {
+      transform: translateY(16px);
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    /* Print styling: output ONLY the crisp A4 receipt */
+    @media print {
+      @page {
+        size: A4 portrait;
+        margin: 12mm;
+      }
+
+      body {
+        background: #ffffff !important;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+
+      .no-print,
+      .edit-only {
+        display: none !important;
+      }
+
+      .receipt-sheet {
+        box-shadow: none !important;
+        border: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        max-width: 100% !important;
+        width: 100% !important;
+      }
+
+      .receipt-input,
+      .receipt-select {
+        border: none !important;
+        background: transparent !important;
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+        appearance: none !important;
+        -webkit-appearance: none !important;
+      }
+
+      .logo-box.is-empty {
+        display: none !important;
+      }
+
+      * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+    }
+  </style>
+</head>
+<body class="min-h-screen antialiased">
+
+  <!-- Top Bar -->
+  <header class="no-print bg-white border-b border-gray-200 sticky top-0 z-30">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-3">
+      <div class="flex items-center gap-2.5 min-w-0">
+        <div class="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5l-3-2-3 2-3-2-3 2V5a2 2 0 012-2h10a2 2 0 012 2v16z" />
+          </svg>
+        </div>
+        <div class="min-w-0">
+          <div class="flex items-center gap-2">
+            <h1 class="text-sm sm:text-base font-bold text-gray-900 truncate tracking-tight">KagozBill</h1>
+            <span id="autoSaveBadge" class="hidden sm:inline-flex items-center gap-1 text-[10px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+              Auto-saved
+            </span>
+          </div>
+          <p class="text-[11px] text-gray-500 hidden sm:block">Click any field on the receipt to edit directly</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <button id="openHistoryBtn" type="button" class="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition">
+          <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span>History</span>
+          <span id="historyCountBadge" class="text-[11px] font-semibold bg-gray-100 text-gray-700 px-1.5 py-0.2 rounded-full">0</span>
+        </button>
+        <button id="togglePreviewBtn" type="button" class="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+          </svg>
+          <span id="previewBtnLabel" class="hidden sm:inline">Preview</span>
+        </button>
+        <button id="topPrintBtn" type="button" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm font-semibold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition shadow-sm">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+          </svg>
+          <span id="topPdfLabel" class="hidden sm:inline">Download PDF</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Workspace -->
+  <main class="max-w-6xl mx-auto px-4 sm:px-6 py-6 lg:py-8">
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+
+      <!-- Left: Live WYSIWYG A4 Receipt Canvas -->
+      <section class="lg:col-span-8 xl:col-span-9">
+        <div id="receiptSheet" class="receipt-sheet theme-minimalist bg-white rounded-xl shadow-md border border-gray-200 p-6 sm:p-10 md:p-12 transition-all">
+
+          <!-- Header Row: Shop Info & Square Logo Box -->
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-6 mb-8">
+            <div class="flex-1 min-w-0">
+              <input
+                id="shopName"
+                type="text"
+                value=""
+                placeholder="SHOP NAME"
+                aria-label="Shop Name"
+                class="receipt-input font-shop-serif text-2xl sm:text-3xl tracking-wide text-gray-900 uppercase px-1.5 py-1 -ml-1.5"
+              />
+              <input
+                id="shopLocation"
+                type="text"
+                value=""
+                placeholder="Shop Location"
+                aria-label="Shop Location"
+                class="receipt-input text-sm sm:text-base text-gray-700 px-1.5 py-1 -ml-1.5 mt-0.5"
+              />
+            </div>
+
+            <!-- Square Logo Upload Box (ideal for brand & social logos) -->
+            <div class="shrink-0">
+              <input id="logoFileInput" type="file" accept="image/*" class="hidden" />
+              <div
+                id="logoBox"
+                role="button"
+                tabindex="0"
+                title="Click to upload shop logo"
+                class="logo-box is-empty relative w-24 h-24 sm:w-28 sm:h-28 rounded-lg border border-gray-900 flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 transition overflow-hidden group"
+              >
+                <div id="logoPlaceholder" class="text-center px-2">
+                  <div class="text-xs font-medium text-gray-600 group-hover:text-emerald-700">+ Add Logo</div>
+                  <div class="text-[10px] text-gray-400 mt-0.5 edit-only">Square / Any</div>
+                </div>
+                <img id="logoPreviewImg" src="" alt="Shop Logo" class="hidden max-w-full max-h-full object-contain p-1.5" />
+                <button
+                  id="removeLogoBtn"
+                  type="button"
+                  title="Remove logo"
+                  class="edit-only hidden absolute top-1 right-1 w-6 h-6 rounded-full bg-gray-900/80 text-white text-sm flex items-center justify-center hover:bg-red-600 transition"
+                >&times;</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Billed To & Invoice Metadata Row -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-9">
+            <!-- Left: Billed To -->
+            <div class="space-y-1">
+              <div class="text-xs font-bold tracking-wider text-gray-900 uppercase mb-1.5">BILLED TO :</div>
+              <input
+                id="customerName"
+                type="text"
+                value=""
+                placeholder="Customer Name"
+                aria-label="Customer Name"
+                class="receipt-input text-sm font-medium text-gray-900 px-1.5 py-0.5 -ml-1.5"
+              />
+              <input
+                id="customerPhone"
+                type="text"
+                value=""
+                placeholder="Phone Number"
+                aria-label="Customer Phone Number"
+                class="receipt-input text-sm text-gray-700 px-1.5 py-0.5 -ml-1.5"
+              />
+              <input
+                id="customerLocation"
+                type="text"
+                value=""
+                placeholder="Location"
+                aria-label="Customer Location"
+                class="receipt-input text-sm text-gray-700 px-1.5 py-0.5 -ml-1.5"
+              />
+            </div>
+
+            <!-- Right: Invoice No, Click-to-Pick Date, Payment Method -->
+            <div class="space-y-2 sm:text-right flex flex-col sm:items-end">
+              <div class="flex items-center sm:justify-end gap-1.5 w-full sm:w-auto">
+                <span class="text-sm text-gray-800 whitespace-nowrap">Invoice No.</span>
+                <input
+                  id="invoiceNo"
+                  type="text"
+                  value="000001"
+                  placeholder="000001"
+                  aria-label="Invoice Number"
+                  class="receipt-input text-sm font-semibold text-gray-900 sm:text-right w-28 px-1.5 py-0.5"
+                />
+              </div>
+
+              <!-- Single Click-to-Pick Date on the Receipt -->
+              <div class="flex items-center sm:justify-end gap-1.5 w-full sm:w-auto">
+                <span class="text-sm text-gray-800 whitespace-nowrap">Date :</span>
+                <div class="relative inline-flex items-center">
+                  <button
+                    id="dateTriggerBtn"
+                    type="button"
+                    title="Click to change date"
+                    class="inline-flex items-center gap-1.5 text-sm font-medium text-gray-900 px-1.5 py-0.5 rounded border border-dashed border-transparent hover:border-gray-300 hover:bg-gray-50 transition"
+                  >
+                    <span id="formattedDateDisplay">27 Nov 2026</span>
+                    <svg class="edit-only w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                  </button>
+                  <input
+                    id="receiptDate"
+                    type="date"
+                    aria-label="Receipt Date"
+                    class="sr-only"
+                  />
+                </div>
+              </div>
+
+              <!-- Payment Method -->
+              <div class="flex items-center sm:justify-end gap-1.5 w-full sm:w-auto">
+                <span class="text-sm text-gray-800 whitespace-nowrap">Payment Method :</span>
+                <select
+                  id="paymentMethod"
+                  aria-label="Payment Method"
+                  class="receipt-select receipt-input text-sm font-medium text-gray-900 sm:text-right w-auto px-1.5 py-0.5 cursor-pointer"
+                >
+                  <option value="bKash">bKash</option>
+                  <option value="Nagad">Nagad</option>
+                  <option value="Rocket">Rocket</option>
+                  <option value="Cash on Delivery">Cash on Delivery</option>
+                  <option value="Cash">Cash</option>
+                  <option value="Card">Card</option>
+                  <option value="Bank Transfer">Bank Transfer</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Line Items Table -->
+          <div class="mb-8">
+            <!-- Table Header -->
+            <div class="table-header-row grid grid-cols-12 gap-2 px-2 py-2.5 text-xs font-bold uppercase tracking-wider">
+              <div class="col-span-5">ITEM</div>
+              <div class="col-span-2 text-center">QTY</div>
+              <div class="col-span-2 text-right">UNIT PRICE</div>
+              <div class="col-span-3 text-right pr-9">TOTAL</div>
+            </div>
+
+            <!-- Dynamic Line Item Rows -->
+            <div id="lineItemsContainer" class="divide-y divide-gray-300 border-b border-gray-300">
+              <!-- Rendered by JS -->
+            </div>
+
+            <!-- Add Line Item Button -->
+            <div class="edit-only mt-3">
+              <button
+                id="addLineItemBtn"
+                type="button"
+                class="w-full py-2 px-3 rounded-lg border border-dashed border-gray-300 bg-gray-50 hover:bg-emerald-50 hover:border-emerald-400 text-xs sm:text-sm font-medium text-gray-700 hover:text-emerald-700 transition flex items-center justify-center gap-1.5"
+              >
+                <span class="text-base leading-none">+</span> Add Line Item
+              </button>
+            </div>
+          </div>
+
+          <!-- Note Box & Totals / Tax / Discount / Delivery / Amount Due -->
+          <div class="grid grid-cols-1 md:grid-cols-12 gap-8 items-start mb-10">
+            <!-- Left: Note Box -->
+            <div class="md:col-span-6">
+              <div class="border border-gray-900 p-3 min-h-[124px] flex flex-col">
+                <label for="receiptNote" class="text-xs font-bold tracking-wider uppercase text-gray-900 mb-1">NOTE :</label>
+                <textarea
+                  id="receiptNote"
+                  rows="3"
+                  placeholder="Thank you for shopping with us! Goods sold can be exchanged within 7 days with this receipt."
+                  class="receipt-input text-xs sm:text-sm text-gray-700 resize-none flex-1 p-1 -m-1 leading-relaxed"
+                ></textarea>
+              </div>
+            </div>
+
+            <!-- Right: Totals Block -->
+            <div class="md:col-span-6 space-y-2.5">
+              <!-- Subtotal -->
+              <div class="flex items-center justify-between text-sm px-1">
+                <span class="font-semibold text-gray-900">Subtotal</span>
+                <span id="subtotalDisplay" class="font-medium text-gray-900 tabular-nums">৳0.00</span>
+              </div>
+
+              <!-- Tax Calculator Row -->
+              <div class="flex items-center justify-between gap-2 text-sm px-1">
+                <div class="flex items-center gap-1.5 flex-wrap">
+                  <span class="font-semibold text-gray-900">Tax</span>
+                  <div class="inline-flex items-center border border-gray-300 rounded-md bg-white overflow-hidden edit-only">
+                    <input
+                      id="taxValueInput"
+                      type="number"
+                      min="0"
+                      step="0.5"
+                      value="0"
+                      aria-label="Tax Rate or Amount"
+                      class="w-14 text-right text-xs font-medium px-1.5 py-1 focus:outline-none"
+                    />
+                    <button
+                      id="taxModeToggleBtn"
+                      type="button"
+                      title="Switch between Percentage (%) and Flat Amount"
+                      class="px-2 py-1 text-xs font-semibold bg-gray-100 hover:bg-emerald-100 text-gray-700 hover:text-emerald-800 border-l border-gray-300 transition"
+                    >%</button>
+                  </div>
+                  <span id="taxPrintLabel" class="text-xs font-semibold text-gray-700 hidden print:inline">(0%)</span>
+                </div>
+                <span id="taxAmountDisplay" class="font-medium text-gray-900 tabular-nums">৳0.00</span>
+              </div>
+
+              <!-- Optional Discount Row -->
+              <div id="discountRow" class="hidden flex items-center justify-between gap-2 text-sm px-1">
+                <div class="flex items-center gap-1.5">
+                  <span class="font-semibold text-gray-900">Discount</span>
+                  <div class="inline-flex items-center border border-gray-300 rounded-md bg-white overflow-hidden edit-only">
+                    <input
+                      id="discountValueInput"
+                      type="number"
+                      min="0"
+                      step="1"
+                      value="0"
+                      aria-label="Discount"
+                      class="w-16 text-right text-xs font-medium px-1.5 py-1 focus:outline-none"
+                    />
+                    <button
+                      id="discountModeToggleBtn"
+                      type="button"
+                      title="Switch between Flat and %"
+                      class="px-2 py-1 text-xs font-semibold bg-gray-100 hover:bg-emerald-100 text-gray-700 border-l border-gray-300 transition"
+                    >%</button>
+                  </div>
+                  <button
+                    id="removeDiscountBtn"
+                    type="button"
+                    title="Remove discount"
+                    aria-label="Remove discount"
+                    class="edit-only w-7 h-7 rounded-md bg-gray-100 hover:bg-red-100 text-gray-500 hover:text-red-600 border border-gray-200 flex items-center justify-center transition"
+                  >
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+                <span id="discountAmountDisplay" class="font-medium text-red-600 tabular-nums">- ৳0.00</span>
+              </div>
+
+              <!-- Optional Delivery Row -->
+              <div id="shippingRow" class="hidden flex items-center justify-between gap-2 text-sm px-1">
+                <div class="flex items-center gap-1.5">
+                  <span class="font-semibold text-gray-900">Delivery</span>
+                  <input
+                    id="shippingValueInput"
+                    type="number"
+                    min="0"
+                    step="10"
+                    value="0"
+                    aria-label="Delivery Charge"
+                    class="edit-only w-20 text-right text-xs font-medium border border-gray-300 rounded-md px-1.5 py-1 focus:outline-none focus:border-emerald-600"
+                  />
+                  <button
+                    id="removeShippingBtn"
+                    type="button"
+                    title="Remove delivery charge"
+                    aria-label="Remove delivery charge"
+                    class="edit-only w-7 h-7 rounded-md bg-gray-100 hover:bg-red-100 text-gray-500 hover:text-red-600 border border-gray-200 flex items-center justify-center transition"
+                  >
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+                <span id="shippingAmountDisplay" class="font-medium text-gray-900 tabular-nums">৳0.00</span>
+              </div>
+
+              <!-- Quick Add Links: Discount, Delivery, Amount Due -->
+              <div class="edit-only flex items-center flex-wrap gap-3 pt-0.5 px-1">
+                <button id="showDiscountBtn" type="button" class="text-xs font-medium text-emerald-700 hover:text-emerald-800 hover:underline">+ Discount</button>
+                <button id="showShippingBtn" type="button" class="text-xs font-medium text-emerald-700 hover:text-emerald-800 hover:underline">+ Delivery</button>
+                <button id="showAmountDueBtn" type="button" class="text-xs font-medium text-emerald-700 hover:text-emerald-800 hover:underline">+ Amount Due</button>
+              </div>
+
+              <!-- Signature Rounded Pill Total (NO brackets) -->
+              <div class="pt-2">
+                <div class="total-pill px-5 py-2.5 flex items-center justify-between text-base sm:text-lg font-bold tracking-wide tabular-nums">
+                  <span>TOTAL</span>
+                  <span id="grandTotalDisplay">৳0.00</span>
+                </div>
+              </div>
+
+              <!-- Optional Advance Paid & Amount Due Block -->
+              <div id="amountDueBlock" class="hidden space-y-2 pt-2 border-t border-gray-200">
+                <div class="flex items-center justify-between gap-2 text-sm px-1">
+                  <div class="flex items-center gap-1.5">
+                    <span class="font-medium text-gray-700">Paid / Advance</span>
+                    <input
+                      id="amountPaidInput"
+                      type="number"
+                      min="0"
+                      step="10"
+                      value="0"
+                      aria-label="Amount Paid"
+                      class="edit-only w-24 text-right text-xs font-medium border border-gray-300 rounded-md px-1.5 py-1 focus:outline-none focus:border-emerald-600"
+                    />
+                    <button
+                      id="removeAmountDueBtn"
+                      type="button"
+                      title="Remove Amount Due"
+                      aria-label="Remove Amount Due"
+                      class="edit-only w-7 h-7 rounded-md bg-gray-100 hover:bg-red-100 text-gray-500 hover:text-red-600 border border-gray-200 flex items-center justify-center transition"
+                    >
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                  <span id="amountPaidDisplay" class="font-medium text-gray-700 tabular-nums">৳0.00</span>
+                </div>
+                <div class="flex items-center justify-between text-sm px-1 pt-0.5">
+                  <span class="font-bold text-gray-900">Amount Due</span>
+                  <span id="amountDueDisplay" class="font-bold text-red-600 tabular-nums">৳0.00</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Footer Row: Contact Info & Seller Signature -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-4 border-t border-gray-100 items-end">
+            <!-- Left: Contact Information -->
+            <div class="space-y-1.5">
+              <div class="text-xs font-bold tracking-wider uppercase text-gray-900 mb-2">CONTACT INFORMATION</div>
+              <div class="flex items-center gap-2">
+                <svg class="w-4 h-4 text-gray-900 shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M6.62 10.79a15.053 15.053 0 006.59 6.59l2.2-2.2a1 1 0 011.01-.24c1.12.37 2.33.57 3.58.57a1 1 0 011 1V20a1 1 0 01-1 1C10.61 21 3 13.39 3 4a1 1 0 011-1h3.5a1 1 0 011 1c0 1.25.2 2.46.57 3.58a1 1 0 01-.25 1.01l-2.2 2.2z"/>
+                </svg>
+                <input
+                  id="contactPhone"
+                  type="text"
+                  value=""
+                  placeholder="Phone Number"
+                  aria-label="Shop Phone Number"
+                  class="receipt-input text-xs sm:text-sm text-gray-800 px-1.5 py-0.5"
+                />
+              </div>
+              <div class="flex items-center gap-2">
+                <svg class="w-4 h-4 text-gray-900 shrink-0" fill="none" stroke="currentColor" stroke-width="1.9" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M3 21l1.65-3.8a9 9 0 113.4 2.9L3 21z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 10a.5.5 0 001 0V9a.5.5 0 00-1 0v1a5 5 0 005 5h1a.5.5 0 000-1h-1a.5.5 0 000 1" />
+                </svg>
+                <input
+                  id="contactWhatsapp"
+                  type="text"
+                  value=""
+                  placeholder="WhatsApp Number"
+                  aria-label="Shop WhatsApp Number"
+                  class="receipt-input text-xs sm:text-sm text-gray-800 px-1.5 py-0.5"
+                />
+              </div>
+            </div>
+
+            <!-- Right: Generated By / Seller Name & Position -->
+            <div class="sm:text-right space-y-0.5">
+              <input
+                id="sellerName"
+                type="text"
+                value=""
+                placeholder="Generated By (Name)"
+                aria-label="Seller Name"
+                class="receipt-input text-sm sm:text-base font-bold text-gray-900 sm:text-right px-1.5 py-0.5"
+              />
+              <input
+                id="sellerRole"
+                type="text"
+                value=""
+                placeholder="Seller / Position"
+                aria-label="Seller Position"
+                class="receipt-input text-xs sm:text-sm text-gray-600 sm:text-right px-1.5 py-0.5"
+              />
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- Right Sidebar: Controls & Settings -->
+      <aside class="no-print lg:col-span-4 xl:col-span-3 space-y-4 lg:sticky lg:top-20">
+
+        <!-- Primary Action Card -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 space-y-2.5">
+          <button
+            id="downloadPngBtn"
+            type="button"
+            class="w-full py-2.5 px-4 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm shadow-sm transition flex items-center justify-center gap-2"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            <span id="downloadPngLabel">Download PNG Image</span>
+          </button>
+
+          <button
+            id="sidebarPrintBtn"
+            type="button"
+            class="w-full py-2 px-4 rounded-lg border border-emerald-600 bg-white hover:bg-emerald-50 text-emerald-700 font-semibold text-sm transition flex items-center justify-center gap-2"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+            </svg>
+            <span id="sidebarPdfLabel">Download PDF</span>
+          </button>
+
+          <div class="grid grid-cols-2 gap-2 pt-0.5">
+            <button
+              id="saveHistoryBtn"
+              type="button"
+              class="py-2 px-3 rounded-lg border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-medium text-xs transition"
+            >
+              Save Receipt
+            </button>
+            <button
+              id="newReceiptBtn"
+              type="button"
+              class="py-2 px-3 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 font-medium text-xs transition"
+            >
+              New Receipt
+            </button>
+          </div>
+        </div>
+
+        <!-- Receipt Settings Card -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 space-y-4">
+          <h2 class="text-xs font-bold uppercase tracking-wider text-gray-500">Receipt Settings</h2>
+
+          <!-- Theme Selector -->
+          <div>
+            <label for="themeSelect" class="block text-xs font-medium text-gray-700 mb-1">Theme</label>
+            <select id="themeSelect" class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+              <option value="minimalist">Minimalist B&amp;W</option>
+              <option value="classic">Classic Dark Header</option>
+              <option value="modern">Modern Emerald</option>
+            </select>
+          </div>
+
+          <!-- Currency Selector -->
+          <div>
+            <label for="currencySelect" class="block text-xs font-medium text-gray-700 mb-1">Currency</label>
+            <select id="currencySelect" class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+              <option value="৳">BDT (৳) — Taka</option>
+              <option value="BDT">BDT — Text Prefix</option>
+              <option value="$">USD ($) — US Dollar</option>
+              <option value="€">EUR (€) — Euro</option>
+              <option value="£">GBP (£) — British Pound</option>
+              <option value="₹">INR (₹) — Indian Rupee</option>
+            </select>
+          </div>
+
+          <!-- Quick Date Buttons (no redundant date input!) -->
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-xs font-medium text-gray-700">Quick Date</span>
+              <span class="text-[11px] text-gray-400">Or click date on sheet</span>
+            </div>
+            <div class="grid grid-cols-2 gap-1.5">
+              <button id="dateTodayBtn" type="button" class="py-1.5 px-2 text-xs font-medium rounded-md border border-gray-200 bg-gray-50 hover:bg-emerald-50 hover:border-emerald-300 hover:text-emerald-700 transition">Today</button>
+              <button id="dateYesterdayBtn" type="button" class="py-1.5 px-2 text-xs font-medium rounded-md border border-gray-200 bg-gray-50 hover:bg-emerald-50 hover:border-emerald-300 hover:text-emerald-700 transition">Yesterday</button>
+            </div>
+          </div>
+
+          <!-- Quick Tax Calculator Presets -->
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-xs font-medium text-gray-700">Quick Tax / VAT (%)</span>
+              <span id="sidebarTaxSummary" class="text-[11px] font-semibold text-emerald-700">0%</span>
+            </div>
+            <div class="grid grid-cols-5 gap-1">
+              <button type="button" data-tax-preset="0" class="tax-preset-btn py-1.5 text-xs font-medium rounded-md border border-gray-200 bg-gray-50 hover:bg-emerald-50 hover:border-emerald-300 transition">0%</button>
+              <button type="button" data-tax-preset="5" class="tax-preset-btn py-1.5 text-xs font-medium rounded-md border border-gray-200 bg-gray-50 hover:bg-emerald-50 hover:border-emerald-300 transition">5%</button>
+              <button type="button" data-tax-preset="7.5" class="tax-preset-btn py-1.5 text-xs font-medium rounded-md border border-gray-200 bg-gray-50 hover:bg-emerald-50 hover:border-emerald-300 transition">7.5%</button>
+              <button type="button" data-tax-preset="10" class="tax-preset-btn py-1.5 text-xs font-medium rounded-md border border-emerald-500 bg-emerald-50 text-emerald-800 transition">10%</button>
+              <button type="button" data-tax-preset="15" class="tax-preset-btn py-1.5 text-xs font-medium rounded-md border border-gray-200 bg-gray-50 hover:bg-emerald-50 hover:border-emerald-300 transition">15%</button>
+            </div>
+          </div>
+
+          <!-- Quick Delivery Presets (60 / 100 / 120) -->
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-xs font-medium text-gray-700">Quick Delivery</span>
+              <span id="sidebarDeliverySummary" class="text-[11px] font-semibold text-emerald-700">Off</span>
+            </div>
+            <div class="grid grid-cols-4 gap-1">
+              <button type="button" data-delivery-preset="0" class="delivery-preset-btn py-1.5 text-xs font-medium rounded-md border border-gray-200 bg-gray-50 hover:bg-emerald-50 hover:border-emerald-300 transition">None</button>
+              <button type="button" data-delivery-preset="60" class="delivery-preset-btn py-1.5 text-xs font-medium rounded-md border border-gray-200 bg-gray-50 hover:bg-emerald-50 hover:border-emerald-300 transition">60</button>
+              <button type="button" data-delivery-preset="100" class="delivery-preset-btn py-1.5 text-xs font-medium rounded-md border border-gray-200 bg-gray-50 hover:bg-emerald-50 hover:border-emerald-300 transition">100</button>
+              <button type="button" data-delivery-preset="120" class="delivery-preset-btn py-1.5 text-xs font-medium rounded-md border border-gray-200 bg-gray-50 hover:bg-emerald-50 hover:border-emerald-300 transition">120</button>
+            </div>
+          </div>
+
+          <!-- Auto Invoice Number Bump -->
+          <div class="pt-2 border-t border-gray-100 flex items-center justify-between">
+            <span class="text-xs text-gray-600">Invoice #</span>
+            <button id="nextInvoiceNoBtn" type="button" class="text-xs font-medium text-emerald-700 hover:text-emerald-800 hover:underline">
+              + Next Number
+            </button>
+          </div>
+        </div>
+
+      </aside>
+    </div>
+  </main>
+
+  <!-- Saved Receipts History Modal -->
+  <div id="historyModal" class="no-print hidden fixed inset-0 z-50 bg-gray-900/40 backdrop-blur-[1px] flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[82vh] flex flex-col overflow-hidden">
+      <div class="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
+        <div>
+          <h3 class="text-base font-semibold text-gray-900">Saved Receipts</h3>
+          <p class="text-xs text-gray-500">Stored in this browser — click any receipt to reload it</p>
+        </div>
+        <button id="closeHistoryBtn" type="button" aria-label="Close history" class="w-8 h-8 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-900 flex items-center justify-center text-lg">&times;</button>
+      </div>
+      <div class="px-5 py-3 border-b border-gray-100">
+        <input
+          id="historySearchInput"
+          type="text"
+          placeholder="Search by customer, phone, or invoice #..."
+          class="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+        />
+      </div>
+      <div id="historyListContainer" class="flex-1 overflow-y-auto divide-y divide-gray-100 px-5 py-2">
+        <!-- Populated by JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- In-page Confirmation Modal for "New Receipt" -->
+  <div id="resetModal" class="no-print hidden fixed inset-0 z-50 bg-gray-900/40 backdrop-blur-[1px] flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-xl max-w-sm w-full p-5 space-y-4">
+      <div>
+        <h3 class="text-base font-semibold text-gray-900">Start a new receipt?</h3>
+        <p class="text-xs sm:text-sm text-gray-600 mt-1">Clears customer details and items, increments the invoice number, and keeps your shop info and logo.</p>
+      </div>
+      <div class="flex items-center justify-end gap-2">
+        <button id="cancelResetBtn" type="button" class="px-3.5 py-2 text-xs sm:text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition">Cancel</button>
+        <button id="confirmResetBtn" type="button" class="px-3.5 py-2 text-xs sm:text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition">Start New</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="no-print toast-exit fixed bottom-5 right-5 z-50 bg-gray-900 text-white text-xs sm:text-sm font-medium px-4 py-2.5 rounded-lg shadow-lg transition-all duration-200">
+    Saved!
+  </div>
+
+  <script>
+    (function () {
+      const DRAFT_KEY = 'kagozbill_draft_v3';
+      const HISTORY_KEY = 'kagozbill_history_v2';
+
+      const state = {
+        theme: 'minimalist',
+        currency: '৳',
+        previewMode: false,
+        taxMode: 'percent',
+        taxValue: 0,
+        showDiscount: false,
+        discountMode: 'percent',
+        discountValue: 0,
+        showShipping: false,
+        shippingValue: 0,
+        showAmountDue: false,
+        amountPaid: 0,
+        logoDataUrl: '',
+        items: [
+          { id: 1, name: '', qty: 1, price: 0 }
+        ],
+        nextItemId: 2
+      };
+
+      // DOM References
+      const receiptSheet = document.getElementById('receiptSheet');
+      const lineItemsContainer = document.getElementById('lineItemsContainer');
+      const subtotalDisplay = document.getElementById('subtotalDisplay');
+      const taxValueInput = document.getElementById('taxValueInput');
+      const taxModeToggleBtn = document.getElementById('taxModeToggleBtn');
+      const taxPrintLabel = document.getElementById('taxPrintLabel');
+      const taxAmountDisplay = document.getElementById('taxAmountDisplay');
+      const grandTotalDisplay = document.getElementById('grandTotalDisplay');
+      const sidebarTaxSummary = document.getElementById('sidebarTaxSummary');
+      const sidebarDeliverySummary = document.getElementById('sidebarDeliverySummary');
+
+      const discountRow = document.getElementById('discountRow');
+      const discountValueInput = document.getElementById('discountValueInput');
+      const discountModeToggleBtn = document.getElementById('discountModeToggleBtn');
+      const discountAmountDisplay = document.getElementById('discountAmountDisplay');
+      const showDiscountBtn = document.getElementById('showDiscountBtn');
+      const removeDiscountBtn = document.getElementById('removeDiscountBtn');
+
+      const shippingRow = document.getElementById('shippingRow');
+      const shippingValueInput = document.getElementById('shippingValueInput');
+      const shippingAmountDisplay = document.getElementById('shippingAmountDisplay');
+      const showShippingBtn = document.getElementById('showShippingBtn');
+      const removeShippingBtn = document.getElementById('removeShippingBtn');
+
+      const amountDueBlock = document.getElementById('amountDueBlock');
+      const amountPaidInput = document.getElementById('amountPaidInput');
+      const amountPaidDisplay = document.getElementById('amountPaidDisplay');
+      const amountDueDisplay = document.getElementById('amountDueDisplay');
+      const showAmountDueBtn = document.getElementById('showAmountDueBtn');
+      const removeAmountDueBtn = document.getElementById('removeAmountDueBtn');
+
+      const receiptDate = document.getElementById('receiptDate');
+      const dateTriggerBtn = document.getElementById('dateTriggerBtn');
+      const formattedDateDisplay = document.getElementById('formattedDateDisplay');
+      const dateTodayBtn = document.getElementById('dateTodayBtn');
+      const dateYesterdayBtn = document.getElementById('dateYesterdayBtn');
+
+      const themeSelect = document.getElementById('themeSelect');
+      const currencySelect = document.getElementById('currencySelect');
+      const invoiceNoInput = document.getElementById('invoiceNo');
+      const nextInvoiceNoBtn = document.getElementById('nextInvoiceNoBtn');
+
+      const logoBox = document.getElementById('logoBox');
+      const logoFileInput = document.getElementById('logoFileInput');
+      const logoPlaceholder = document.getElementById('logoPlaceholder');
+      const logoPreviewImg = document.getElementById('logoPreviewImg');
+      const removeLogoBtn = document.getElementById('removeLogoBtn');
+
+      const togglePreviewBtn = document.getElementById('togglePreviewBtn');
+      const previewBtnLabel = document.getElementById('previewBtnLabel');
+      const topPrintBtn = document.getElementById('topPrintBtn');
+      const sidebarPrintBtn = document.getElementById('sidebarPrintBtn');
+      const downloadPngBtn = document.getElementById('downloadPngBtn');
+      const downloadPngLabel = document.getElementById('downloadPngLabel');
+      const saveHistoryBtn = document.getElementById('saveHistoryBtn');
+      const newReceiptBtn = document.getElementById('newReceiptBtn');
+      const resetModal = document.getElementById('resetModal');
+      const cancelResetBtn = document.getElementById('cancelResetBtn');
+      const confirmResetBtn = document.getElementById('confirmResetBtn');
+
+      const openHistoryBtn = document.getElementById('openHistoryBtn');
+      const historyCountBadge = document.getElementById('historyCountBadge');
+      const historyModal = document.getElementById('historyModal');
+      const closeHistoryBtn = document.getElementById('closeHistoryBtn');
+      const historySearchInput = document.getElementById('historySearchInput');
+      const historyListContainer = document.getElementById('historyListContainer');
+      const toastEl = document.getElementById('toast');
+
+      const textFieldIds = [
+        'shopName', 'shopLocation', 'customerName', 'customerPhone',
+        'customerLocation', 'invoiceNo', 'paymentMethod', 'receiptNote',
+        'contactPhone', 'contactWhatsapp', 'sellerName', 'sellerRole'
+      ];
+
+      let toastTimer = null;
+      let autoSaveTimer = null;
+
+      function showToast(msg) {
+        toastEl.textContent = msg;
+        toastEl.classList.remove('toast-exit');
+        toastEl.classList.add('toast-enter');
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => {
+          toastEl.classList.remove('toast-enter');
+          toastEl.classList.add('toast-exit');
+        }, 2200);
+      }
+
+      // Single consistent number & money formatter (always commas + 2 decimals)
+      function formatNumber(amount) {
+        const safe = Number.isFinite(amount) ? amount : 0;
+        return safe.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      }
+
+      function formatMoney(amount) {
+        const numStr = formatNumber(amount);
+        return state.currency === 'BDT' ? `BDT ${numStr}` : `${state.currency}${numStr}`;
+      }
+
+      function parseNumericInput(str) {
+        const cleaned = String(str || '').replace(/,/g, '').trim();
+        const val = parseFloat(cleaned);
+        return Number.isFinite(val) && val >= 0 ? val : 0;
+      }
+
+      function toISODate(dateObj) {
+        const y = dateObj.getFullYear();
+        const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+        const d = String(dateObj.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+      }
+
+      function formatReadableDate(isoStr) {
+        if (!isoStr) return '';
+        const parts = isoStr.split('-');
+        if (parts.length !== 3) return isoStr;
+        const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+        if (Number.isNaN(d.getTime())) return isoStr;
+        return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+      }
+
+      function setDateValue(isoStr) {
+        receiptDate.value = isoStr;
+        formattedDateDisplay.textContent = formatReadableDate(isoStr);
+        scheduleAutoSave();
+      }
+
+      function updatePresetHighlights() {
+        document.querySelectorAll('.tax-preset-btn').forEach((btn) => {
+          const val = parseFloat(btn.dataset.taxPreset);
+          const isActive = state.taxMode === 'percent' && Math.abs(state.taxValue - val) < 0.001;
+          btn.classList.toggle('border-emerald-500', isActive);
+          btn.classList.toggle('bg-emerald-50', isActive);
+          btn.classList.toggle('text-emerald-800', isActive);
+          btn.classList.toggle('border-gray-200', !isActive);
+          btn.classList.toggle('bg-gray-50', !isActive);
+        });
+
+        document.querySelectorAll('.delivery-preset-btn').forEach((btn) => {
+          const val = parseFloat(btn.dataset.deliveryPreset);
+          const isActive = (!state.showShipping && val === 0) ||
+            (state.showShipping && Math.abs(state.shippingValue - val) < 0.001);
+          btn.classList.toggle('border-emerald-500', isActive);
+          btn.classList.toggle('bg-emerald-50', isActive);
+          btn.classList.toggle('text-emerald-800', isActive);
+          btn.classList.toggle('border-gray-200', !isActive);
+          btn.classList.toggle('bg-gray-50', !isActive);
+        });
+      }
+
+      function computeTotals() {
+        const subtotal = state.items.reduce((sum, item) => {
+          const q = Math.max(0, parseFloat(item.qty) || 0);
+          const p = Math.max(0, parseFloat(item.price) || 0);
+          return sum + q * p;
+        }, 0);
+
+        const rawTax = Math.max(0, parseFloat(state.taxValue) || 0);
+        const taxAmount = state.taxMode === 'percent' ? (subtotal * rawTax) / 100 : rawTax;
+
+        let discountAmount = 0;
+        if (state.showDiscount) {
+          const rawDisc = Math.max(0, parseFloat(state.discountValue) || 0);
+          discountAmount = state.discountMode === 'percent' ? (subtotal * rawDisc) / 100 : rawDisc;
+        }
+
+        const shippingAmount = state.showShipping ? Math.max(0, parseFloat(state.shippingValue) || 0) : 0;
+        const grandTotal = Math.max(0, subtotal + taxAmount + shippingAmount - discountAmount);
+        const paidAmount = state.showAmountDue ? Math.max(0, parseFloat(state.amountPaid) || 0) : 0;
+        const amountDue = Math.max(0, grandTotal - paidAmount);
+
+        return { subtotal, rawTax, taxAmount, discountAmount, shippingAmount, grandTotal, paidAmount, amountDue };
+      }
+
+      function recalculateTotals() {
+        const t = computeTotals();
+
+        subtotalDisplay.textContent = formatMoney(t.subtotal);
+        taxAmountDisplay.textContent = formatMoney(t.taxAmount);
+        taxPrintLabel.textContent = state.taxMode === 'percent' ? `(${t.rawTax}%)` : '(Fixed)';
+        sidebarTaxSummary.textContent = state.taxMode === 'percent' ? `${t.rawTax}%` : formatMoney(t.rawTax);
+        sidebarDeliverySummary.textContent = state.showShipping ? formatMoney(t.shippingAmount) : 'Off';
+
+        discountAmountDisplay.textContent = `- ${formatMoney(t.discountAmount)}`;
+        shippingAmountDisplay.textContent = formatMoney(t.shippingAmount);
+        grandTotalDisplay.textContent = formatMoney(t.grandTotal);
+
+        amountPaidDisplay.textContent = formatMoney(t.paidAmount);
+        amountDueDisplay.textContent = formatMoney(t.amountDue);
+
+        updatePresetHighlights();
+        scheduleAutoSave();
+      }
+
+      function escapeHtml(str) {
+        return String(str)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      }
+
+      function renderLineItems() {
+        lineItemsContainer.innerHTML = '';
+
+        state.items.forEach((item) => {
+          const row = document.createElement('div');
+          row.className = 'grid grid-cols-12 gap-2 items-center px-2 py-2.5 group relative';
+          row.dataset.id = item.id;
+
+          const rowTotal = Math.max(0, parseFloat(item.qty) || 0) * Math.max(0, parseFloat(item.price) || 0);
+
+          row.innerHTML = `
+            <div class="col-span-5">
+              <input
+                type="text"
+                data-field="name"
+                value="${escapeHtml(item.name)}"
+                placeholder="Item name..."
+                aria-label="Item Name"
+                class="receipt-input text-sm text-gray-900 px-1.5 py-1 -ml-1.5"
+              />
+            </div>
+            <div class="col-span-2">
+              <input
+                type="number"
+                data-field="qty"
+                min="0"
+                step="1"
+                value="${item.qty}"
+                aria-label="Quantity"
+                class="receipt-input text-sm text-center text-gray-900 px-1 py-1 tabular-nums"
+              />
+            </div>
+            <div class="col-span-2">
+              <input
+                type="text"
+                inputmode="decimal"
+                data-field="price"
+                value="${formatNumber(item.price)}"
+                aria-label="Unit Price"
+                class="receipt-input text-sm text-right text-gray-900 px-1 py-1 tabular-nums"
+              />
+            </div>
+            <div class="col-span-3 flex items-center justify-end gap-2">
+              <span class="row-total text-sm font-medium text-gray-900 tabular-nums">${formatMoney(rowTotal)}</span>
+              <button
+                type="button"
+                data-action="delete"
+                title="Remove item"
+                aria-label="Remove item"
+                class="edit-only w-7 h-7 rounded-md bg-gray-100 hover:bg-red-100 text-gray-500 hover:text-red-600 border border-gray-200 flex items-center justify-center transition shrink-0"
+              >
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          `;
+
+          lineItemsContainer.appendChild(row);
+        });
+
+        recalculateTotals();
+      }
+
+      // Line item input & consistent unit-price formatting on focus/blur
+      lineItemsContainer.addEventListener('focusin', (e) => {
+        const input = e.target;
+        if (input.dataset.field === 'price') {
+          const val = parseNumericInput(input.value);
+          input.value = val === 0 ? '' : String(val);
+        }
+      });
+
+      lineItemsContainer.addEventListener('focusout', (e) => {
+        const input = e.target;
+        if (input.dataset.field === 'price') {
+          const val = parseNumericInput(input.value);
+          input.value = formatNumber(val);
+        }
+      });
+
+      lineItemsContainer.addEventListener('input', (e) => {
+        const input = e.target;
+        const field = input.dataset.field;
+        if (!field) return;
+        const row = input.closest('[data-id]');
+        if (!row) return;
+        const id = Number(row.dataset.id);
+        const item = state.items.find((i) => i.id === id);
+        if (!item) return;
+
+        if (field === 'name') {
+          item.name = input.value;
+        } else if (field === 'qty') {
+          item.qty = input.value === '' ? 0 : parseFloat(input.value);
+        } else if (field === 'price') {
+          item.price = parseNumericInput(input.value);
+        }
+
+        const rowTotal = Math.max(0, parseFloat(item.qty) || 0) * Math.max(0, parseFloat(item.price) || 0);
+        const totalSpan = row.querySelector('.row-total');
+        if (totalSpan) totalSpan.textContent = formatMoney(rowTotal);
+        recalculateTotals();
+      });
+
+      lineItemsContainer.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-action="delete"]');
+        if (!btn) return;
+        const row = btn.closest('[data-id]');
+        if (!row) return;
+        const id = Number(row.dataset.id);
+        if (state.items.length === 1) {
+          state.items[0] = { id: state.items[0].id, name: '', qty: 1, price: 0 };
+        } else {
+          state.items = state.items.filter((i) => i.id !== id);
+        }
+        renderLineItems();
+      });
+
+      document.getElementById('addLineItemBtn').addEventListener('click', () => {
+        state.items.push({ id: state.nextItemId++, name: '', qty: 1, price: 0 });
+        renderLineItems();
+        const lastInput = lineItemsContainer.querySelector('[data-id]:last-child input[data-field="name"]');
+        if (lastInput) lastInput.focus();
+      });
+
+      // Tax controls
+      taxValueInput.addEventListener('input', () => {
+        state.taxValue = parseFloat(taxValueInput.value) || 0;
+        recalculateTotals();
+      });
+
+      taxModeToggleBtn.addEventListener('click', () => {
+        state.taxMode = state.taxMode === 'percent' ? 'flat' : 'percent';
+        taxModeToggleBtn.textContent = state.taxMode === 'percent' ? '%' : state.currency;
+        recalculateTotals();
+      });
+
+      document.querySelectorAll('.tax-preset-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          state.taxMode = 'percent';
+          taxModeToggleBtn.textContent = '%';
+          state.taxValue = parseFloat(btn.dataset.taxPreset);
+          taxValueInput.value = state.taxValue;
+          recalculateTotals();
+        });
+      });
+
+      // Discount controls
+      function setDiscountVisible(visible) {
+        state.showDiscount = visible;
+        discountRow.classList.toggle('hidden', !visible);
+        showDiscountBtn.classList.toggle('hidden', visible);
+      }
+
+      showDiscountBtn.addEventListener('click', () => {
+        setDiscountVisible(true);
+        discountValueInput.focus();
+        recalculateTotals();
+      });
+
+      removeDiscountBtn.addEventListener('click', () => {
+        state.discountValue = 0;
+        discountValueInput.value = 0;
+        setDiscountVisible(false);
+        recalculateTotals();
+      });
+
+      discountValueInput.addEventListener('input', () => {
+        state.discountValue = parseFloat(discountValueInput.value) || 0;
+        recalculateTotals();
+      });
+
+      discountModeToggleBtn.addEventListener('click', () => {
+        state.discountMode = state.discountMode === 'percent' ? 'flat' : 'percent';
+        discountModeToggleBtn.textContent = state.discountMode === 'percent' ? '%' : state.currency;
+        recalculateTotals();
+      });
+
+      // Delivery controls & Quick Delivery Presets (60 / 100 / 120)
+      function setShippingVisible(visible) {
+        state.showShipping = visible;
+        shippingRow.classList.toggle('hidden', !visible);
+        showShippingBtn.classList.toggle('hidden', visible);
+      }
+
+      showShippingBtn.addEventListener('click', () => {
+        setShippingVisible(true);
+        shippingValueInput.focus();
+        recalculateTotals();
+      });
+
+      removeShippingBtn.addEventListener('click', () => {
+        state.shippingValue = 0;
+        shippingValueInput.value = 0;
+        setShippingVisible(false);
+        recalculateTotals();
+      });
+
+      shippingValueInput.addEventListener('input', () => {
+        state.shippingValue = parseFloat(shippingValueInput.value) || 0;
+        recalculateTotals();
+      });
+
+      document.querySelectorAll('.delivery-preset-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const val = parseFloat(btn.dataset.deliveryPreset);
+          if (val === 0) {
+            state.shippingValue = 0;
+            shippingValueInput.value = 0;
+            setShippingVisible(false);
+          } else {
+            state.shippingValue = val;
+            shippingValueInput.value = val;
+            setShippingVisible(true);
+          }
+          recalculateTotals();
+        });
+      });
+
+      // Amount Due / Advance Paid controls
+      function setAmountDueVisible(visible) {
+        state.showAmountDue = visible;
+        amountDueBlock.classList.toggle('hidden', !visible);
+        showAmountDueBtn.classList.toggle('hidden', visible);
+      }
+
+      showAmountDueBtn.addEventListener('click', () => {
+        setAmountDueVisible(true);
+        amountPaidInput.focus();
+        recalculateTotals();
+      });
+
+      removeAmountDueBtn.addEventListener('click', () => {
+        state.amountPaid = 0;
+        amountPaidInput.value = 0;
+        setAmountDueVisible(false);
+        recalculateTotals();
+      });
+
+      amountPaidInput.addEventListener('input', () => {
+        state.amountPaid = parseFloat(amountPaidInput.value) || 0;
+        recalculateTotals();
+      });
+
+      // Single Click-to-Pick Date on the sheet + Quick Today/Yesterday buttons
+      dateTriggerBtn.addEventListener('click', () => {
+        if (state.previewMode) return;
+        if (typeof receiptDate.showPicker === 'function') {
+          try {
+            receiptDate.showPicker();
+            return;
+          } catch (err) {
+            // Fall through to click/focus
+          }
+        }
+        receiptDate.focus();
+        receiptDate.click();
+      });
+
+      receiptDate.addEventListener('change', () => {
+        if (receiptDate.value) setDateValue(receiptDate.value);
+      });
+
+      dateTodayBtn.addEventListener('click', () => {
+        setDateValue(toISODate(new Date()));
+        showToast('Date set to today');
+      });
+
+      dateYesterdayBtn.addEventListener('click', () => {
+        const d = new Date();
+        d.setDate(d.getDate() - 1);
+        setDateValue(toISODate(d));
+        showToast('Date set to yesterday');
+      });
+
+      // Theme & Currency
+      function applyTheme(themeName) {
+        receiptSheet.classList.remove('theme-minimalist', 'theme-classic', 'theme-modern');
+        state.theme = themeName || 'minimalist';
+        receiptSheet.classList.add(`theme-${state.theme}`);
+        themeSelect.value = state.theme;
+      }
+
+      themeSelect.addEventListener('change', () => {
+        applyTheme(themeSelect.value);
+        scheduleAutoSave();
+      });
+
+      currencySelect.addEventListener('change', () => {
+        state.currency = currencySelect.value;
+        if (state.taxMode === 'flat') taxModeToggleBtn.textContent = state.currency;
+        if (state.discountMode === 'flat') discountModeToggleBtn.textContent = state.currency;
+        renderLineItems();
+      });
+
+      // Next Invoice Number helper
+      function incrementInvoiceNo() {
+        const current = invoiceNoInput.value.trim();
+        const match = current.match(/(\d+)$/);
+        if (match) {
+          const numStr = match[1];
+          const nextNum = String(parseInt(numStr, 10) + 1).padStart(numStr.length, '0');
+          invoiceNoInput.value = current.slice(0, -numStr.length) + nextNum;
+        } else {
+          invoiceNoInput.value = '012346';
+        }
+        scheduleAutoSave();
+      }
+
+      nextInvoiceNoBtn.addEventListener('click', () => {
+        incrementInvoiceNo();
+        showToast(`Invoice # updated to ${invoiceNoInput.value}`);
+      });
+
+      // Logo upload
+      function applyLogo(dataUrl) {
+        state.logoDataUrl = dataUrl || '';
+        if (state.logoDataUrl) {
+          logoPreviewImg.src = state.logoDataUrl;
+          logoPreviewImg.classList.remove('hidden');
+          logoPlaceholder.classList.add('hidden');
+          removeLogoBtn.classList.remove('hidden');
+          logoBox.classList.remove('is-empty');
+        } else {
+          logoPreviewImg.src = '';
+          logoPreviewImg.classList.add('hidden');
+          logoPlaceholder.classList.remove('hidden');
+          removeLogoBtn.classList.add('hidden');
+          logoBox.classList.add('is-empty');
+        }
+        scheduleAutoSave();
+      }
+
+      logoBox.addEventListener('click', (e) => {
+        if (e.target === removeLogoBtn || state.previewMode) return;
+        logoFileInput.click();
+      });
+
+      logoBox.addEventListener('keydown', (e) => {
+        if ((e.key === 'Enter' || e.key === ' ') && !state.previewMode) {
+          e.preventDefault();
+          logoFileInput.click();
+        }
+      });
+
+      logoFileInput.addEventListener('change', (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          applyLogo(ev.target.result);
+          showToast('Logo uploaded');
+        };
+        reader.readAsDataURL(file);
+        logoFileInput.value = '';
+      });
+
+      removeLogoBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        applyLogo('');
+        showToast('Logo removed');
+      });
+
+      // Preview Mode Toggle
+      togglePreviewBtn.addEventListener('click', () => {
+        state.previewMode = !state.previewMode;
+        receiptSheet.classList.toggle('preview-mode', state.previewMode);
+        previewBtnLabel.textContent = state.previewMode ? 'Edit' : 'Preview';
+        togglePreviewBtn.classList.toggle('bg-emerald-50', state.previewMode);
+        togglePreviewBtn.classList.toggle('border-emerald-500', state.previewMode);
+        togglePreviewBtn.classList.toggle('text-emerald-800', state.previewMode);
+        taxPrintLabel.classList.toggle('hidden', !state.previewMode);
+      });
+
+      // Serialize & Restore Full Receipt Snapshot (Auto-Save + History)
+      function captureSnapshot() {
+        const fields = {};
+        textFieldIds.forEach((id) => {
+          const el = document.getElementById(id);
+          if (el) fields[id] = el.value;
+        });
+        const totals = computeTotals();
+        return {
+          savedAt: new Date().toISOString(),
+          date: receiptDate.value,
+          fields,
+          theme: state.theme,
+          currency: state.currency,
+          taxMode: state.taxMode,
+          taxValue: state.taxValue,
+          showDiscount: state.showDiscount,
+          discountMode: state.discountMode,
+          discountValue: state.discountValue,
+          showShipping: state.showShipping,
+          shippingValue: state.shippingValue,
+          showAmountDue: state.showAmountDue,
+          amountPaid: state.amountPaid,
+          logoDataUrl: state.logoDataUrl,
+          items: state.items.map((i) => ({ ...i })),
+          grandTotal: totals.grandTotal
+        };
+      }
+
+      function applySnapshot(snap) {
+        if (!snap) return;
+        if (snap.fields) {
+          textFieldIds.forEach((id) => {
+            const el = document.getElementById(id);
+            if (el && snap.fields[id] !== undefined) el.value = snap.fields[id];
+          });
+        }
+        if (snap.date) setDateValue(snap.date);
+        applyTheme(snap.theme || 'minimalist');
+
+        state.currency = snap.currency || '৳';
+        currencySelect.value = state.currency;
+
+        state.taxMode = snap.taxMode || 'percent';
+        state.taxValue = snap.taxValue !== undefined ? snap.taxValue : 10;
+        taxValueInput.value = state.taxValue;
+        taxModeToggleBtn.textContent = state.taxMode === 'percent' ? '%' : state.currency;
+
+        state.discountMode = snap.discountMode || 'percent';
+        state.discountValue = snap.discountValue || 0;
+        discountValueInput.value = state.discountValue;
+        discountModeToggleBtn.textContent = state.discountMode === 'percent' ? '%' : state.currency;
+        setDiscountVisible(Boolean(snap.showDiscount));
+
+        state.shippingValue = snap.shippingValue || 0;
+        shippingValueInput.value = state.shippingValue;
+        setShippingVisible(Boolean(snap.showShipping));
+
+        state.amountPaid = snap.amountPaid || 0;
+        amountPaidInput.value = state.amountPaid;
+        setAmountDueVisible(Boolean(snap.showAmountDue));
+
+        applyLogo(snap.logoDataUrl || '');
+
+        if (Array.isArray(snap.items) && snap.items.length > 0) {
+          state.items = snap.items.map((item, idx) => ({
+            id: idx + 1,
+            name: item.name || '',
+            qty: item.qty !== undefined ? item.qty : 1,
+            price: item.price !== undefined ? item.price : 0
+          }));
+          state.nextItemId = state.items.length + 1;
+        }
+        renderLineItems();
+      }
+
+      function scheduleAutoSave() {
+        clearTimeout(autoSaveTimer);
+        autoSaveTimer = setTimeout(() => {
+          try {
+            localStorage.setItem(DRAFT_KEY, JSON.stringify(captureSnapshot()));
+          } catch (err) {
+            // Ignore storage quota errors
+          }
+        }, 250);
+      }
+
+      // Attach auto-save listener to all editable text fields
+      textFieldIds.forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) {
+          el.addEventListener('input', scheduleAutoSave);
+          el.addEventListener('change', scheduleAutoSave);
+        }
+      });
+
+      // Receipt History Management
+      function getHistory() {
+        try {
+          const raw = localStorage.getItem(HISTORY_KEY);
+          return raw ? JSON.parse(raw) : [];
+        } catch (err) {
+          return [];
+        }
+      }
+
+      function setHistory(list) {
+        try {
+          localStorage.setItem(HISTORY_KEY, JSON.stringify(list));
+        } catch (err) {
+          showToast('Browser storage full — delete old receipts');
+        }
+        updateHistoryBadge();
+      }
+
+      function updateHistoryBadge() {
+        historyCountBadge.textContent = String(getHistory().length);
+      }
+
+      function saveCurrentToHistory(silent) {
+        const snap = captureSnapshot();
+        const invNo = (snap.fields.invoiceNo || 'Untitled').trim();
+        const history = getHistory();
+        const existingIdx = history.findIndex((h) => (h.fields && h.fields.invoiceNo) === invNo);
+        const entry = { ...snap, historyId: existingIdx >= 0 ? history[existingIdx].historyId : Date.now() };
+        if (existingIdx >= 0) {
+          history.splice(existingIdx, 1);
+        }
+        history.unshift(entry);
+        // Keep up to 50 recent receipts
+        setHistory(history.slice(0, 50));
+        if (!silent) showToast(`Receipt #${invNo} saved to History`);
+      }
+
+      function renderHistoryList(filterText) {
+        const query = (filterText || '').toLowerCase().trim();
+        const list = getHistory().filter((entry) => {
+          if (!query) return true;
+          const f = entry.fields || {};
+          return (
+            String(f.invoiceNo || '').toLowerCase().includes(query) ||
+            String(f.customerName || '').toLowerCase().includes(query) ||
+            String(f.customerPhone || '').toLowerCase().includes(query)
+          );
+        });
+
+        if (list.length === 0) {
+          historyListContainer.innerHTML = `
+            <div class="py-10 text-center text-sm text-gray-500">
+              ${query ? 'No matching receipts found.' : 'No saved receipts yet. Click "Save Receipt" or download a PNG/PDF to save automatically.'}
+            </div>
+          `;
+          return;
+        }
+
+        historyListContainer.innerHTML = list.map((entry) => {
+          const f = entry.fields || {};
+          const cur = entry.currency || '৳';
+          const numStr = formatNumber(entry.grandTotal || 0);
+          const totalStr = cur === 'BDT' ? `BDT ${numStr}` : `${cur}${numStr}`;
+          return `
+            <div class="py-3 flex items-center justify-between gap-3" data-history-id="${entry.historyId}">
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-2">
+                  <span class="text-sm font-semibold text-gray-900">#${escapeHtml(f.invoiceNo || '—')}</span>
+                  <span class="text-xs text-gray-500">${escapeHtml(formatReadableDate(entry.date || ''))}</span>
+                </div>
+                <div class="text-xs text-gray-600 truncate mt-0.5">
+                  ${escapeHtml(f.customerName || 'Walk-in Customer')} ${f.customerPhone ? '• ' + escapeHtml(f.customerPhone) : ''}
+                </div>
+              </div>
+              <div class="text-right shrink-0 flex items-center gap-2">
+                <span class="text-sm font-semibold text-gray-900 tabular-nums">${escapeHtml(totalStr)}</span>
+                <button type="button" data-history-action="load" class="px-2.5 py-1 text-xs font-medium rounded-md bg-emerald-50 text-emerald-800 hover:bg-emerald-100 transition">Load</button>
+                <button type="button" data-history-action="delete" title="Delete" aria-label="Delete saved receipt" class="w-7 h-7 rounded-md bg-gray-100 hover:bg-red-100 text-gray-500 hover:text-red-600 flex items-center justify-center transition">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+
+      saveHistoryBtn.addEventListener('click', () => saveCurrentToHistory(false));
+
+      openHistoryBtn.addEventListener('click', () => {
+        historySearchInput.value = '';
+        renderHistoryList('');
+        historyModal.classList.remove('hidden');
+      });
+
+      closeHistoryBtn.addEventListener('click', () => {
+        historyModal.classList.add('hidden');
+      });
+
+      historyModal.addEventListener('click', (e) => {
+        if (e.target === historyModal) historyModal.classList.add('hidden');
+      });
+
+      historySearchInput.addEventListener('input', () => {
+        renderHistoryList(historySearchInput.value);
+      });
+
+      historyListContainer.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-history-action]');
+        if (!btn) return;
+        const row = btn.closest('[data-history-id]');
+        if (!row) return;
+        const hid = Number(row.dataset.historyId);
+        const action = btn.dataset.historyAction;
+        const list = getHistory();
+        const entry = list.find((item) => item.historyId === hid);
+        if (!entry) return;
+
+        if (action === 'load') {
+          applySnapshot(entry);
+          historyModal.classList.add('hidden');
+          showToast(`Loaded Receipt #${entry.fields && entry.fields.invoiceNo ? entry.fields.invoiceNo : ''}`);
+        } else if (action === 'delete') {
+          setHistory(list.filter((item) => item.historyId !== hid));
+          renderHistoryList(historySearchInput.value);
+          showToast('Receipt removed from History');
+        }
+      });
+
+      // Shared crisp 2x canvas capture for PNG & A4 PDF export
+      async function captureReceiptCanvas() {
+        const wasPreview = state.previewMode;
+        receiptSheet.classList.add('export-mode');
+        taxPrintLabel.classList.remove('hidden');
+        try {
+          return await window.html2canvas(receiptSheet, {
+            scale: 2,
+            backgroundColor: '#ffffff',
+            useCORS: true,
+            onclone: (clonedDoc) => {
+              const clonedSheet = clonedDoc.getElementById('receiptSheet');
+              if (!clonedSheet) return;
+              clonedSheet.querySelectorAll('input, select, textarea').forEach((el) => {
+                if (el.type === 'file' || el.type === 'date' || el.classList.contains('hidden')) return;
+                const span = clonedDoc.createElement(el.tagName === 'TEXTAREA' ? 'div' : 'span');
+                const cs = window.getComputedStyle(el);
+                span.textContent = el.tagName === 'SELECT'
+                  ? (el.options[el.selectedIndex] ? el.options[el.selectedIndex].text : el.value)
+                  : el.value;
+                span.className = el.className.replace('receipt-input', '');
+                span.style.display = el.tagName === 'TEXTAREA' ? 'block' : 'inline-block';
+                span.style.whiteSpace = el.tagName === 'TEXTAREA' ? 'pre-wrap' : 'nowrap';
+                span.style.fontFamily = cs.fontFamily;
+                span.style.fontSize = cs.fontSize;
+                span.style.fontWeight = cs.fontWeight;
+                span.style.color = cs.color;
+                span.style.textAlign = cs.textAlign;
+                span.style.width = el.tagName === 'SELECT' ? 'auto' : '100%';
+                el.parentNode.replaceChild(span, el);
+              });
+            }
+          });
+        } finally {
+          receiptSheet.classList.remove('export-mode');
+          if (!wasPreview) taxPrintLabel.classList.add('hidden');
+        }
+      }
+
+      // Download PNG Image (crisp 2x retina export for Messenger / WhatsApp)
+      downloadPngBtn.addEventListener('click', async () => {
+        if (typeof window.html2canvas !== 'function') {
+          showToast('Image exporter is still loading, please try again');
+          return;
+        }
+        downloadPngBtn.disabled = true;
+        downloadPngLabel.textContent = 'Generating PNG...';
+        saveCurrentToHistory(true);
+        try {
+          const canvas = await captureReceiptCanvas();
+          const link = document.createElement('a');
+          const inv = (invoiceNoInput.value || 'receipt').replace(/[^a-zA-Z0-9_-]/g, '');
+          link.download = `KagozBill-${inv}.png`;
+          link.href = canvas.toDataURL('image/png');
+          link.click();
+          showToast(`Downloaded KagozBill-${inv}.png`);
+        } catch (err) {
+          showToast('Could not export PNG — please try again');
+        } finally {
+          downloadPngBtn.disabled = false;
+          downloadPngLabel.textContent = 'Download PNG Image';
+        }
+      });
+
+      // Direct A4 PDF Download (works everywhere without browser print pop-up blocks)
+      async function handleDownloadPdf() {
+        saveCurrentToHistory(true);
+        const jsPDFCtor = window.jspdf && window.jspdf.jsPDF;
+        if (typeof window.html2canvas !== 'function' || typeof jsPDFCtor !== 'function') {
+          window.print();
+          return;
+        }
+        const topPdfLabel = document.getElementById('topPdfLabel');
+        const sidebarPdfLabel = document.getElementById('sidebarPdfLabel');
+        topPrintBtn.disabled = true;
+        sidebarPrintBtn.disabled = true;
+        if (topPdfLabel) topPdfLabel.textContent = 'Generating...';
+        if (sidebarPdfLabel) sidebarPdfLabel.textContent = 'Generating PDF...';
+
+        try {
+          const canvas = await captureReceiptCanvas();
+          const imgData = canvas.toDataURL('image/png');
+          const pdf = new jsPDFCtor({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+          const pageW = pdf.internal.pageSize.getWidth();
+          const pageH = pdf.internal.pageSize.getHeight();
+          const margin = 10;
+          const maxW = pageW - margin * 2;
+          const maxH = pageH - margin * 2;
+          const ratio = Math.min(maxW / canvas.width, maxH / canvas.height);
+          const renderW = canvas.width * ratio;
+          const renderH = canvas.height * ratio;
+          const offsetX = (pageW - renderW) / 2;
+          pdf.addImage(imgData, 'PNG', offsetX, margin, renderW, renderH, undefined, 'FAST');
+          const inv = (invoiceNoInput.value || 'receipt').replace(/[^a-zA-Z0-9_-]/g, '');
+          pdf.save(`KagozBill-${inv}.pdf`);
+          showToast(`Downloaded KagozBill-${inv}.pdf`);
+        } catch (err) {
+          showToast('Could not generate PDF — trying browser print');
+          window.print();
+        } finally {
+          topPrintBtn.disabled = false;
+          sidebarPrintBtn.disabled = false;
+          if (topPdfLabel) topPdfLabel.textContent = 'Download PDF';
+          if (sidebarPdfLabel) sidebarPdfLabel.textContent = 'Download PDF';
+        }
+      }
+      topPrintBtn.addEventListener('click', handleDownloadPdf);
+      sidebarPrintBtn.addEventListener('click', handleDownloadPdf);
+
+      // New Receipt Modal
+      newReceiptBtn.addEventListener('click', () => {
+        resetModal.classList.remove('hidden');
+      });
+
+      cancelResetBtn.addEventListener('click', () => {
+        resetModal.classList.add('hidden');
+      });
+
+      confirmResetBtn.addEventListener('click', () => {
+        document.getElementById('customerName').value = '';
+        document.getElementById('customerPhone').value = '';
+        document.getElementById('customerLocation').value = '';
+        state.amountPaid = 0;
+        amountPaidInput.value = 0;
+        setAmountDueVisible(false);
+        incrementInvoiceNo();
+        setDateValue(toISODate(new Date()));
+        state.items = [{ id: state.nextItemId++, name: '', qty: 1, price: 0 }];
+        renderLineItems();
+        resetModal.classList.add('hidden');
+        showToast('Started a fresh receipt');
+      });
+
+      // Initialize: restore auto-saved draft if present
+      function loadDraft() {
+        try {
+          const raw = localStorage.getItem(DRAFT_KEY);
+          if (raw) {
+            applySnapshot(JSON.parse(raw));
+            return true;
+          }
+        } catch (err) {
+          // Ignore storage errors
+        }
+        return false;
+      }
+
+      if (!loadDraft()) {
+        setDateValue(toISODate(new Date()));
+        renderLineItems();
+      }
+      updateHistoryBadge();
+    })();
+  </script>
+</body>
+</html>
